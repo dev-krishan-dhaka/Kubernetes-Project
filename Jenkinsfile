@@ -2,10 +2,15 @@ pipeline {
     agent any
 
     environment {
-        DOCKERHUB_CREDS = credentials('dockerhub-creds')
-        GITHUB_CREDS = credentials('github-creds')
-        DOCKERHUB_USER = 'devkrishan001'
+        // Use EXACT credential IDs from your Jenkins
+        DOCKERHUB_CREDS = credentials('DOCKERHUB_CREDENTIALS')
+        GITHUB_CREDS = credentials('GITHUB_CREDENTIALS')
+        DOCKERHUB_USER = 'devkrishan001'  // Your actual DockerHub username
         IMAGE_TAG = "v${BUILD_NUMBER}"
+    }
+
+    triggers {
+        pollSCM('* * * * *')
     }
 
     stages {
@@ -18,9 +23,8 @@ pipeline {
         stage('Get Changed Files') {
             steps {
                 script {
-                    // Get list of changed files in this commit
                     sh '''
-                        git diff --name-only HEAD~1 HEAD > changed_files.txt || echo "No previous commit" > changed_files.txt
+                        git diff --name-only HEAD~1 HEAD > changed_files.txt 2>/dev/null || echo "" > changed_files.txt
                     '''
                 }
             }
@@ -29,18 +33,17 @@ pipeline {
         stage('Build Backend') {
             steps {
                 script {
-                    // Only build if backend folder has changes
                     def backendChanged = sh(script: "grep -q '^backend/' changed_files.txt", returnStatus: true) == 0
                     
                     if (backendChanged) {
                         sh """
-                            echo "🔨 Building backend - changes detected in backend/ folder"
+                            echo "🔨 Building backend..."
                             docker build -t ${DOCKERHUB_USER}/backend:${IMAGE_TAG} ./backend
                             docker tag ${DOCKERHUB_USER}/backend:${IMAGE_TAG} ${DOCKERHUB_USER}/backend:latest
-                            echo "BACKEND_BUILT=true" >> build_status.txt
+                            echo "BACKEND_BUILT=true" > build_status.txt
                         """
                     } else {
-                        echo "⏭️ Skipping backend build - no changes in backend/ folder"
+                        echo "⏭️ No backend changes - skipping build"
                     }
                 }
             }
@@ -49,18 +52,17 @@ pipeline {
         stage('Build Frontend') {
             steps {
                 script {
-                    // Only build if frontend folder has changes
                     def frontendChanged = sh(script: "grep -q '^frontend/' changed_files.txt", returnStatus: true) == 0
                     
                     if (frontendChanged) {
                         sh """
-                            echo "🔨 Building frontend - changes detected in frontend/ folder"
+                            echo "🔨 Building frontend..."
                             docker build -t ${DOCKERHUB_USER}/frontend:${IMAGE_TAG} ./frontend
                             docker tag ${DOCKERHUB_USER}/frontend:${IMAGE_TAG} ${DOCKERHUB_USER}/frontend:latest
                             echo "FRONTEND_BUILT=true" >> build_status.txt
                         """
                     } else {
-                        echo "⏭️ Skipping frontend build - no changes in frontend/ folder"
+                        echo "⏭️ No frontend changes - skipping build"
                     }
                 }
             }
@@ -69,12 +71,12 @@ pipeline {
         stage('Push to DockerHub') {
             steps {
                 script {
-                    def backendBuilt = sh(script: "grep -q 'BACKEND_BUILT=true' build_status.txt", returnStatus: true) == 0
-                    def frontendBuilt = sh(script: "grep -q 'FRONTEND_BUILT=true' build_status.txt", returnStatus: true) == 0
+                    def backendBuilt = fileExists('build_status.txt') ? sh(script: "grep -q 'BACKEND_BUILT=true' build_status.txt", returnStatus: true) == 0 : false
+                    def frontendBuilt = fileExists('build_status.txt') ? sh(script: "grep -q 'FRONTEND_BUILT=true' build_status.txt", returnStatus: true) == 0 : false
                     
                     if (backendBuilt || frontendBuilt) {
                         sh """
-                            echo "📤 Pushing images to DockerHub"
+                            echo "📤 Logging into DockerHub..."
                             echo ${DOCKERHUB_CREDS_PSW} | docker login -u ${DOCKERHUB_CREDS_USR} --password-stdin
                         """
                         
@@ -92,8 +94,8 @@ pipeline {
                             """
                         }
                     } else {
-                        echo "⏭️ No images to push - no changes in backend or frontend"
-                        error "No changes detected - stopping pipeline"
+                        echo "⏭️ No images to push - no changes detected"
+                        error "No changes in backend or frontend"
                     }
                 }
             }
@@ -102,21 +104,13 @@ pipeline {
         stage('Update values.yaml') {
             steps {
                 script {
-                    def backendBuilt = sh(script: "grep -q 'BACKEND_BUILT=true' build_status.txt", returnStatus: true) == 0
-                    def frontendBuilt = sh(script: "grep -q 'FRONTEND_BUILT=true' build_status.txt", returnStatus: true) == 0
+                    def backendBuilt = fileExists('build_status.txt') ? sh(script: "grep -q 'BACKEND_BUILT=true' build_status.txt", returnStatus: true) == 0 : false
+                    def frontendBuilt = fileExists('build_status.txt') ? sh(script: "grep -q 'FRONTEND_BUILT=true' build_status.txt", returnStatus: true) == 0 : false
                     
-                    // Update only the tag that changed
-                    if (backendBuilt) {
+                    if (backendBuilt || frontendBuilt) {
                         sh """
-                            echo "📝 Updating backend image tag in values.yaml"
-                            sed -i '/backend:/,/frontend:/ s|tag: ".*"|tag: "${IMAGE_TAG}"|' helm-chart/values.yaml
-                        """
-                    }
-                    
-                    if (frontendBuilt) {
-                        sh """
-                            echo "📝 Updating frontend image tag in values.yaml"
-                            sed -i '/frontend:/,/postgres:/ s|tag: ".*"|tag: "${IMAGE_TAG}"|' helm-chart/values.yaml
+                            echo "📝 Updating image tags in values.yaml"
+                            sed -i 's|tag: ".*"|tag: "${IMAGE_TAG}"|g' helm-chart/values.yaml
                         """
                     }
                 }
@@ -126,8 +120,8 @@ pipeline {
         stage('Push to GitHub') {
             when {
                 expression {
-                    def backendBuilt = sh(script: "grep -q 'BACKEND_BUILT=true' build_status.txt", returnStatus: true) == 0
-                    def frontendBuilt = sh(script: "grep -q 'FRONTEND_BUILT=true' build_status.txt", returnStatus: true) == 0
+                    def backendBuilt = fileExists('build_status.txt') ? sh(script: "grep -q 'BACKEND_BUILT=true' build_status.txt", returnStatus: true) == 0 : false
+                    def frontendBuilt = fileExists('build_status.txt') ? sh(script: "grep -q 'FRONTEND_BUILT=true' build_status.txt", returnStatus: true) == 0 : false
                     return backendBuilt || frontendBuilt
                 }
             }
@@ -147,8 +141,9 @@ pipeline {
 
     post {
         always {
-            // Cleanup
-            sh "rm -f changed_files.txt build_status.txt"
+            script {
+                sh 'rm -f changed_files.txt build_status.txt || true'
+            }
         }
         success {
             echo """
@@ -156,11 +151,11 @@ pipeline {
             ║  ✅ CI/CD Pipeline Successful!        ║
             ╚════════════════════════════════════════╝
             
-            📦 Images pushed: ${IMAGE_TAG}
-            🚀 ArgoCD will auto-deploy within 3 minutes
+            🏷️  Image Tag: ${IMAGE_TAG}
+            🐳 DockerHub: ${DOCKERHUB_USER}/backend:${IMAGE_TAG}
+            🐳 DockerHub: ${DOCKERHUB_USER}/frontend:${IMAGE_TAG}
             
-            Monitor deployment:
-            kubectl get pods -n user-management -w
+            🚀 ArgoCD will auto-deploy within 3 minutes
             """
         }
         failure {
@@ -169,7 +164,7 @@ pipeline {
             ║  ❌ Pipeline Failed!                   ║
             ╚════════════════════════════════════════╝
             
-            Check console output for details.
+            Check the error above for details.
             """
         }
     }
