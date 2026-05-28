@@ -61,7 +61,7 @@ postgres:
   name: postgres
   image:
     repository: postgres
-    tag: "v5"
+    tag: "15-alpine" 
   replicas: 1
   port: 5432
   service:
