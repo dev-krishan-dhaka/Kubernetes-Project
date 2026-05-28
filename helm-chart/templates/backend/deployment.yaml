@@ -53,17 +53,3 @@ spec:
           limits:
             cpu: {{ .Values.backend.resources.limits.cpu }}
             memory: {{ .Values.backend.resources.limits.memory }}
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: backend-service
-  namespace: {{ .Values.namespace }}
-spec:
-  selector:
-    app: {{ .Values.backend.name }}
-  type: {{ .Values.backend.service.type }}
-  ports:
-  - port: {{ .Values.backend.port }}
-    targetPort: {{ .Values.backend.port }}
-    nodePort: {{ .Values.backend.service.nodePort }}

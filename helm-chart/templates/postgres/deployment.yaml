@@ -52,16 +52,3 @@ spec:
         {{- else }}
         emptyDir: {}
         {{- end }}
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: postgres-service
-  namespace: {{ .Values.namespace }}
-spec:
-  selector:
-    app: {{ .Values.postgres.name }}
-  type: {{ .Values.postgres.service.type }}
-  ports:
-  - port: {{ .Values.postgres.port }}
-    targetPort: {{ .Values.postgres.port }}
