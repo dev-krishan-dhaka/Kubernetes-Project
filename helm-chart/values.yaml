@@ -1,0 +1,103 @@
+# ─────────────────────────────────────────
+# NAMESPACE
+# ─────────────────────────────────────────
+namespace: user-management
+
+# ─────────────────────────────────────────
+# BACKEND
+# ─────────────────────────────────────────
+backend:
+  name: backend
+  image:
+    repository: devkrishan001/backend
+    tag: "v1"
+    pullPolicy: IfNotPresent
+  replicas: 2
+  port: 5000
+  service:
+    type: NodePort
+    nodePort: 30081
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+  hpa:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 5
+    cpuThreshold: 50
+  pdb:
+    enabled: true
+    minAvailable: 1
+  env:
+    DB_HOST: postgres-service
+    DB_PORT: "5432"
+
+# ─────────────────────────────────────────
+# FRONTEND
+# ─────────────────────────────────────────
+frontend:
+  name: frontend
+  image:
+    repository: devkrishan001/frontend
+    tag: "v3"
+    pullPolicy: IfNotPresent
+  replicas: 2
+  port: 80
+  service:
+    type: NodePort
+    nodePort: 30080
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "300m"
+      memory: "256Mi"
+  hpa:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 4
+    cpuThreshold: 50
+  pdb:
+    enabled: true
+    minAvailable: 1
+
+# ─────────────────────────────────────────
+# POSTGRES
+# ─────────────────────────────────────────
+postgres:
+  name: postgres
+  image:
+    repository: postgres
+    tag: "15-alpine"
+  replicas: 1
+  port: 5432
+  service:
+    type: ClusterIP
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+  pvc:
+    enabled: true
+    storageSize: "1Gi"
+  credentials:
+    database: userdb
+    username: postgres
+    password: postgres123
+    jwtSecret: myjwtsecret
+
+# ─────────────────────────────────────────
+# INGRESS (disabled by default)
+# ─────────────────────────────────────────
+ingress:
+  enabled: false
+  className: "nginx"
+  host: "yourdomain.com"
