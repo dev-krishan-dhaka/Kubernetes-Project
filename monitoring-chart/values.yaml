@@ -1,0 +1,89 @@
+# ─────────────────────────────────────────
+# PROMETHEUS
+# ─────────────────────────────────────────
+prometheus:
+  grafana:
+    enabled: false        # we use separate grafana
+  prometheus:
+    prometheusSpec:
+      scrapeInterval: "15s"
+      evaluationInterval: "15s"
+      retention: "7d"
+      resources:
+        requests:
+          cpu: "200m"
+          memory: "512Mi"
+        limits:
+          cpu: "500m"
+          memory: "1Gi"
+
+# ─────────────────────────────────────────
+# LOKI
+# ─────────────────────────────────────────
+loki:
+  loki:
+    enabled: true
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "128Mi"
+      limits:
+        cpu: "200m"
+        memory: "256Mi"
+  promtail:
+    enabled: true         # auto collects logs from all pods
+    resources:
+      requests:
+        cpu: "50m"
+        memory: "64Mi"
+      limits:
+        cpu: "100m"
+        memory: "128Mi"
+  grafana:
+    enabled: false        # we use separate grafana
+
+# ─────────────────────────────────────────
+# GRAFANA
+# ─────────────────────────────────────────
+grafana:
+  adminPassword: "admin123"
+
+  service:
+    type: NodePort
+    nodePort: 32000
+
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "200m"
+      memory: "256Mi"
+
+  # pre-configure both datasources automatically
+  datasources:
+    datasources.yaml:
+      apiVersion: 1
+      datasources:
+        - name: Prometheus
+          type: prometheus
+          url: http://monitoring-stack-prometheus-prometheus.monitoring.svc.cluster.local:9090
+          access: proxy
+          isDefault: true
+
+        - name: Loki
+          type: loki
+          url: http://monitoring-stack-loki.monitoring.svc.cluster.local:3100
+          access: proxy
+
+  # pre-load your dashboard automatically
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: "default"
+          folder: "User Management"
+          type: file
+          disableDeletion: false
+          options:
+            path: /var/lib/grafana/dashboards/default
