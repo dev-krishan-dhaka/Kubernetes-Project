@@ -1,20 +1,20 @@
-# Only overrides — everything else uses chart defaults
+# Only overrides for Grafana
+adminPassword: "admin123"
 
-grafana:
-  adminPassword: "admin123"    # default is random, we want fixed
-  service:
-    type: NodePort             # default is ClusterIP, we need NodePort
-    nodePort: 32000            # our port
-  datasources:
-    datasources.yaml:
-      apiVersion: 1
-      datasources:
-        - name: Prometheus
-          type: prometheus
-          url: http://prometheus-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090
-          access: proxy
-          isDefault: true
-        - name: Loki
-          type: loki
-          url: http://loki.monitoring.svc.cluster.local:3100
-          access: proxy
+service:
+  type: NodePort
+  nodePort: 32000
+
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        url: http://prometheus-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090
+        access: proxy
+        isDefault: true
+      - name: Loki
+        type: loki
+        url: http://loki.monitoring.svc.cluster.local:3100
+        access: proxy
