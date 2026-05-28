@@ -4,7 +4,7 @@ backend:
   name: backend
   image:
     repository: devkrishan001/backend
-    tag: "v1"
+    tag: "v5"
     pullPolicy: Always
   replicas: 2
   port: 5000
@@ -34,7 +34,7 @@ frontend:
   name: frontend
   image:
     repository: devkrishan001/frontend
-    tag: "v3"
+    tag: "v5"
     pullPolicy: Always
   replicas: 2
   port: 80
@@ -61,7 +61,7 @@ postgres:
   name: postgres
   image:
     repository: postgres
-    tag: "15-alpine"
+    tag: "v5"
   replicas: 1
   port: 5432
   service:
