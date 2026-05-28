@@ -100,22 +100,25 @@ pipeline {
                 }
             }
         }
+stage('Update values.yaml') {
+    steps {
+        script {
+            def backendBuilt = ...
+            def frontendBuilt = ...
 
-        stage('Update values.yaml') {
-            steps {
-                script {
-                    def backendBuilt = fileExists('build_status.txt') ? sh(script: "grep -q 'BACKEND_BUILT=true' build_status.txt", returnStatus: true) == 0 : false
-                    def frontendBuilt = fileExists('build_status.txt') ? sh(script: "grep -q 'FRONTEND_BUILT=true' build_status.txt", returnStatus: true) == 0 : false
-                    
-                    if (backendBuilt || frontendBuilt) {
-                        sh """
-                            echo "📝 Updating image tags in values.yaml"
-                            sed -i 's|tag: ".*"|tag: "${IMAGE_TAG}"|g' helm-chart/values.yaml
-                        """
-                    }
-                }
+            if (backendBuilt) {
+                sh """
+                    sed -i '/^backend:/,/^[a-z]/ s|tag: ".*"|tag: "${IMAGE_TAG}"|' helm-chart/values.yaml
+                """
+            }
+            if (frontendBuilt) {
+                sh """
+                    sed -i '/^frontend:/,/^[a-z]/ s|tag: ".*"|tag: "${IMAGE_TAG}"|' helm-chart/values.yaml
+                """
             }
         }
+    }
+}
 
         stage('Push to GitHub') {
             when {
