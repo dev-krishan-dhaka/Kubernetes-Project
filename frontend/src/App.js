@@ -16,7 +16,7 @@ function App() {
     <div style={styles.page}>
       <div style={styles.card}>
         <div style={styles.hero}>
-          <h1 style={styles.title}>User Management</h1>
+          <h1 style={styles.title}>User Management Dev JI </h1>
           <p style={styles.subtitle}>Sign in or create a new account</p>
         </div>
 
