@@ -123,15 +123,18 @@ pipeline {
         }
 
         stage('Update values.yaml') {
+            when {
+                expression {
+                    return fileExists('build_status.txt')
+                }
+            }
             steps {
                 script {
-                    def backendBuilt = fileExists('build_status.txt') ?
-                        sh(script: "grep -q 'BACKEND_BUILT=true' build_status.txt",
-                           returnStatus: true) == 0 : false
+                    def backendBuilt = sh(script: "grep -q 'BACKEND_BUILT=true' build_status.txt",
+                        returnStatus: true) == 0
 
-                    def frontendBuilt = fileExists('build_status.txt') ?
-                        sh(script: "grep -q 'FRONTEND_BUILT=true' build_status.txt",
-                           returnStatus: true) == 0 : false
+                    def frontendBuilt = sh(script: "grep -q 'FRONTEND_BUILT=true' build_status.txt",
+                        returnStatus: true) == 0
 
                     if (backendBuilt) {
                         sh """
@@ -146,11 +149,6 @@ pipeline {
                             echo "✅ Frontend tag updated to ${IMAGE_TAG}"
                         """
                     }
-
-                    sh """
-                        echo "=== Current values.yaml image tags ==="
-                        grep -A2 'image:' helm-chart/values.yaml | grep 'tag:'
-                    """
                 }
             }
         }
