@@ -32,7 +32,7 @@ frontend:
   name: frontend
   image:
     repository: devkrishan001/frontend
-    tag: "v5"
+    tag: "v15"
     pullPolicy: Always
   replicas: 2
   port: 80
