@@ -1,10 +1,9 @@
 namespace: user-management
-
 backend:
   name: backend
   image:
     repository: devkrishan001/backend
-    tag: "v5"
+    tag: "v16"
     pullPolicy: Always
   replicas: 2
   port: 5000
@@ -29,7 +28,6 @@ backend:
   env:
     DB_HOST: postgres-service
     DB_PORT: "5432"
-
 frontend:
   name: frontend
   image:
@@ -56,12 +54,11 @@ frontend:
   pdb:
     enabled: true
     minAvailable: 1
-
 postgres:
   name: postgres
   image:
     repository: postgres
-    tag: "15-alpine" 
+    tag: "15-alpine"
   replicas: 1
   port: 5432
   service:
@@ -81,7 +78,6 @@ postgres:
     username: postgres
     password: postgres123
     jwtSecret: myjwtsecret
-
 ingress:
   enabled: false
   className: "nginx"
