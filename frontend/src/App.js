@@ -17,7 +17,7 @@ function App() {
       <div style={styles.card}>
         <div style={styles.hero}>
           <h1 style={styles.title}>User Management Dev JI </h1>
-          <p style={styles.subtitle}>Sign in or create a new account</p>
+          <p style={styles.subtitle}>Sign in or create a new account okey</p>
         </div>
 
         {successMsg && <div style={styles.successBanner}>{successMsg}</div>}
