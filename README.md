@@ -24,7 +24,10 @@
 16. [Access Grafana & Import Dashboard](#access-grafana--import-dashboard)
 17. [Install ArgoCD (CD)](#install-argocd-cd)
 18. [Jenkins CI Pipeline](#jenkins-ci-pipeline)
-19. [Dashboard Reference](#dashboard-reference)
+19. [Testing — Ingress, HPA & PDB](#testing--ingress-hpa--pdb)
+20. [Dashboard Reference](#dashboard-reference)
+21. [Quick Troubleshooting](#quick-troubleshooting)
+22. [Full Stack Summary](#full-stack-summary)
 
 ---
 
@@ -267,8 +270,8 @@ helm-chart/
     ├── backend/
     │   ├── deployment.yaml
     │   ├── service.yaml
-    │   ├── hpa.yaml
-    │   └── pdb.yaml
+    │   ├── hpa.yaml         ← auto-scaling with scale down behavior
+    │   └── pdb.yaml         ← min 1 pod always running
     ├── frontend/
     │   ├── deployment.yaml
     │   ├── service.yaml
@@ -279,7 +282,7 @@ helm-chart/
     │   ├── service.yaml
     │   ├── secret.yaml
     │   ├── configmap.yaml
-    │   └── pvc.yaml
+    │   └── pvc.yaml         ← persistent storage
     └── ingress.yaml
 ```
 
@@ -319,6 +322,26 @@ kubectl get all -n user-management
 kubectl get hpa -n user-management
 kubectl get pdb -n user-management
 kubectl get pvc -n user-management
+```
+
+### Fix ArgoCD + HPA Conflict (important)
+
+ArgoCD and HPA both manage `replicas` — they fight each other. Fix by telling ArgoCD to ignore the replicas field:
+
+```bash
+kubectl patch application user-management -n argocd \
+  --type merge \
+  -p '{
+    "spec": {
+      "ignoreDifferences": [
+        {
+          "group": "apps",
+          "kind": "Deployment",
+          "jsonPointers": ["/spec/replicas"]
+        }
+      ]
+    }
+  }'
 ```
 
 ### Updating the App
@@ -411,13 +434,7 @@ helm upgrade --install loki grafana/loki-stack \
 
 ### Install Grafana
 
-```bash
-helm upgrade --install grafana grafana/grafana \
-  --namespace monitoring \
-  --values ~/user-managemenT/monitoring-chart/values.yaml
-```
-
-Where `monitoring-chart/values.yaml` contains:
+Create `monitoring-chart/values.yaml`:
 
 ```yaml
 adminPassword: "admin123"
@@ -439,6 +456,14 @@ datasources:
         type: loki
         url: http://loki.monitoring.svc.cluster.local:3100
         access: proxy
+```
+
+Install:
+
+```bash
+helm upgrade --install grafana grafana/grafana \
+  --namespace monitoring \
+  --values ~/user-managemenT/monitoring-chart/values.yaml
 ```
 
 ### Verify PVCs Created
@@ -603,31 +628,223 @@ ArgoCD detects change → auto deploys to Kubernetes ✅
 
 ---
 
+## Testing — Ingress, HPA & PDB
+
+### What Each Feature Does
+
+| Feature | Simple Explanation |
+|---|---|
+| **Ingress** | Single URL routes to correct service — like a receptionist |
+| **HPA** | Auto adds/removes pods based on CPU — like hiring extra staff when busy |
+| **PDB** | Guarantees minimum pods always running — like "at least 1 staff always on duty" |
+
+---
+
+### 🔀 Testing Ingress
+
+Ingress gives you a clean URL instead of IP:port.
+
+```
+Without Ingress:  http://3.7.54.254:30080  → frontend
+With Ingress:     http://user-management.local  → frontend
+                  http://user-management.local/api → backend
+```
+
+**STEP 1 — Install Nginx Ingress Controller**
+
+```bash
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.8.2/deploy/static/provider/baremetal/deploy.yaml
+
+kubectl get pods -n ingress-nginx -w
+```
+
+Wait until pod is `Running`.
+
+**STEP 2 — Enable Ingress in values.yaml**
+
+```bash
+nano ~/user-managemenT/helm-chart/values.yaml
+```
+
+Change:
+
+```yaml
+ingress:
+  enabled: true
+  className: "nginx"
+  host: "user-management.local"
+```
+
+**STEP 3 — Upgrade Helm**
+
+```bash
+helm upgrade user-management helm-chart/ --namespace user-management
+```
+
+**STEP 4 — Get Ingress Port**
+
+```bash
+kubectl get svc -n ingress-nginx
+kubectl get ingress -n user-management
+```
+
+**STEP 5 — Add to /etc/hosts on your LOCAL machine**
+
+```bash
+echo "<EC2_PUBLIC_IP> user-management.local" | sudo tee -a /etc/hosts
+```
+
+**STEP 6 — Open in Browser**
+
+```
+http://user-management.local:<ingress-nodeport>
+```
+
+✅ App loads without port 30080!
+
+---
+
+### 📈 Testing HPA (Auto Scaling)
+
+HPA automatically scales pods up when CPU is high and back down when load drops.
+
+**STEP 1 — Check current state**
+
+```bash
+kubectl get hpa -n user-management
+```
+
+Expected (idle):
+
+```
+NAME          TARGETS   MINPODS   MAXPODS   REPLICAS
+backend-hpa   2%/50%    2         5         2
+frontend-hpa  0%/50%    2         4         2
+```
+
+**STEP 2 — Run stress test**
+
+```bash
+kubectl run stress-test \
+  --image=busybox \
+  --restart=Never \
+  -n user-management \
+  -- /bin/sh -c "while true; do wget -q -O- http://backend-service:5000/health; done"
+```
+
+**STEP 3 — Watch scaling in real time (open 2 terminals)**
+
+```bash
+# Terminal 1 — watch HPA
+kubectl get hpa -n user-management -w
+
+# Terminal 2 — watch pods
+kubectl get pods -n user-management -w
+```
+
+You will see:
+
+```
+backend-hpa   2%/50%    2   5   2    ← idle
+backend-hpa   78%/50%   2   5   2    ← stress started
+backend-hpa   78%/50%   2   5   4    ← scaled up!
+backend-hpa   82%/50%   2   5   5    ← max replicas!
+```
+
+**STEP 4 — Stop stress test**
+
+```bash
+kubectl delete pod stress-test -n user-management
+```
+
+Pods scale back down to 2 within ~60 seconds (configured in HPA behavior). ✅
+
+> **Note:** HPA scale down behavior is configured with `stabilizationWindowSeconds: 60` to prevent oscillation. ArgoCD is also configured to ignore replicas field so it doesn't conflict with HPA.
+
+---
+
+### 🛡️ Testing PDB (Pod Disruption Budget)
+
+PDB ensures minimum pods are always running even during updates or maintenance.
+
+**STEP 1 — Check PDB status**
+
+```bash
+kubectl get pdb -n user-management
+```
+
+Expected:
+
+```
+NAME           MIN AVAILABLE   MAX UNAVAILABLE   ALLOWED DISRUPTIONS
+backend-pdb    1               N/A               1
+frontend-pdb   1               N/A               1
+```
+
+`ALLOWED DISRUPTIONS: 1` means only 1 pod can go down at a time. ✅
+
+**STEP 2 — Simulate node drain (dry run — safe)**
+
+```bash
+kubectl drain ip-172-31-25-213 \
+  --ignore-daemonsets \
+  --delete-emptydir-data \
+  --dry-run=client
+```
+
+`--dry-run` shows what WOULD happen without doing it.
+
+**STEP 3 — Delete all backend pods at once**
+
+```bash
+kubectl delete pods -l app=backend -n user-management
+
+# watch immediately in another terminal
+kubectl get pods -n user-management -w
+```
+
+You will see:
+
+```
+backend-xxx   Running      ← pod 1 terminating
+backend-yyy   Running      ← pod 2 still up! PDB protecting ✅
+backend-zzz   Pending      ← new pod starting
+```
+
+App stays up throughout. Zero downtime! ✅
+
+---
+
 ## Dashboard Reference
 
 ### Prometheus Queries
 
 **Backend CPU:**
+
 ```promql
 sum(rate(container_cpu_usage_seconds_total{namespace="user-management", pod=~"backend-.*", container!="", container!="POD"}[5m])) by (pod)
 ```
 
 **Backend Memory:**
+
 ```promql
 sum(container_memory_working_set_bytes{namespace="user-management", pod=~"backend-.*", container!="", container!="POD"}) by (pod)
 ```
 
 **Frontend CPU:**
+
 ```promql
 sum(rate(container_cpu_usage_seconds_total{namespace="user-management", pod=~"frontend-.*", container!="", container!="POD"}[5m])) by (pod)
 ```
 
 **Frontend Memory:**
+
 ```promql
 sum(container_memory_working_set_bytes{namespace="user-management", pod=~"frontend-.*", container!="", container!="POD"}) by (pod)
 ```
 
 **Pod Restart Count:**
+
 ```promql
 sum(kube_pod_container_status_restarts_total{namespace="user-management"}) by (pod)
 ```
@@ -635,11 +852,13 @@ sum(kube_pod_container_status_restarts_total{namespace="user-management"}) by (p
 ### Loki Log Queries
 
 **Backend Logs:**
+
 ```logql
 {namespace="user-management", pod=~"backend-.*"}
 ```
 
 **Frontend Logs:**
+
 ```logql
 {namespace="user-management", pod=~"frontend-.*"}
 ```
@@ -653,9 +872,13 @@ sum(kube_pod_container_status_restarts_total{namespace="user-management"}) by (p
 | Node `NotReady` | Wait for Calico: `kubectl get pods -A` |
 | Grafana `No Data` | Check monitoring pods: `kubectl get pods -n monitoring` |
 | HPA shows `<unknown>` | Install metrics-server + patch with `--kubelet-insecure-tls` |
+| HPA not scaling down | Delete + recreate HPA to reset internal state |
+| HPA fights with ArgoCD | Patch ArgoCD to ignore `/spec/replicas` field |
 | PVC `Pending` | Install local-path-provisioner and set as default StorageClass |
 | ArgoCD shows empty tree | Check ArgoCD app `path:` points to `helm-chart` not `k8s` |
+| ArgoCD recreates resources | Add `.argocd-ignore` file or move non-K8s files to subfolder |
 | Jenkins push rejected | Already handled — pipeline retries 3 times with rebase |
+| Jenkins no changes = fail | Remove `error` from Push to DockerHub else block — use `echo` |
 | Loki missing namespace | Restart promtail: `kubectl rollout restart daemonset -n monitoring` |
 | Port unreachable | Add inbound rule in EC2 Security Group |
 
@@ -674,6 +897,7 @@ sum(kube_pod_container_status_restarts_total{namespace="user-management"}) by (p
 | **PostgreSQL** | Database with PVC | internal |
 | **HPA** | Auto-scales pods on CPU | automatic |
 | **PDB** | Min pods always available | automatic |
+| **Ingress** | Clean URL routing | via nginx controller |
 | **Prometheus** | Metrics scraping + PVC | internal |
 | **Loki** | Log storage + PVC | internal |
 | **Promtail** | Log collector (DaemonSet) | automatic |
