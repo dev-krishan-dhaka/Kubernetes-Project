@@ -115,8 +115,8 @@ pipeline {
                         }
 
                     } else {
-                        echo "⏭️ No images to push - no changes detected"
-                        error "No changes in backend or frontend"
+                        echo "⏭️ No changes in backend or frontend — skipping push ✅"
+                        // NO error here — just skip and continue to success
                     }
                 }
             }
