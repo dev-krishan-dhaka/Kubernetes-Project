@@ -137,7 +137,6 @@ pipeline {
                     } else {
 
                         echo "⏭️ No images to push - no changes detected"
-
                         error "No changes in backend or frontend"
 
                     }
@@ -162,19 +161,21 @@ pipeline {
                         ) == 0 : false
 
                     if (backendBuilt) {
-
                         sh """
-                            sed -i '/^backend:/,/^[a-z]/ s|tag: ".*"|tag: "${IMAGE_TAG}"|' helm-chart/values.yaml
-                        """
+                            yq e '.backend.image.tag = "${IMAGE_TAG}"' \
+                              -i helm-chart/values.yaml
 
+                            echo "✅ Backend tag updated to ${IMAGE_TAG}"
+                        """
                     }
 
                     if (frontendBuilt) {
-
                         sh """
-                            sed -i '/^frontend:/,/^[a-z]/ s|tag: ".*"|tag: "${IMAGE_TAG}"|' helm-chart/values.yaml
-                        """
+                            yq e '.frontend.image.tag = "${IMAGE_TAG}"' \
+                              -i helm-chart/values.yaml
 
+                            echo "✅ Frontend tag updated to ${IMAGE_TAG}"
+                        """
                     }
                 }
             }
@@ -234,7 +235,7 @@ pipeline {
             ║  ✅ CI/CD Pipeline Successful!        ║
             ╚════════════════════════════════════════╝
 
-            🏷️  Image Tag: ${IMAGE_TAG}
+            🏷️ Image Tag: ${IMAGE_TAG}
 
             🐳 DockerHub:
             ${DOCKERHUB_USER}/backend:${IMAGE_TAG}
