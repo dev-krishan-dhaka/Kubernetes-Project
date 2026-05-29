@@ -79,6 +79,6 @@ postgres:
     password: postgres123
     jwtSecret: myjwtsecret
 ingress:
-  enabled: false
+  enabled: true
   className: "nginx"
-  host: "yourdomain.com"
+  host: "user-management.local"

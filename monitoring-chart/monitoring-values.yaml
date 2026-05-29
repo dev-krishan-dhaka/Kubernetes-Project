@@ -1,0 +1,17 @@
+prometheus:
+  prometheusSpec:
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: local-path
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 1Gi
+
+loki:
+  persistence:
+    enabled: true
+    storageClassName: local-path
+    size: 1Gi

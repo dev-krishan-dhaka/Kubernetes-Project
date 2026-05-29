@@ -18,4 +18,17 @@ spec:
       target:
         type: Utilization
         averageUtilization: {{ .Values.backend.hpa.cpuThreshold }}
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Pods
+        value: 2
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 30
+      policies:
+      - type: Pods
+        value: 1
+        periodSeconds: 60
 {{- end }}
